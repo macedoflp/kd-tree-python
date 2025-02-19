@@ -37,8 +37,8 @@ def construir_arvore_kd(dados, indices, profundidade=0):
     if not indices:
         return None
 
-    k = dados.shape[1]  
-    eixo = profundidade % k  
+    k = dados.shape[1]  # Número de dimensões
+    eixo = profundidade % k  # Eixo que será usado na divisão
 
     indices_ordenados = sorted(indices, key=lambda i: dados[i, eixo])
     indice_mediano = len(indices_ordenados) // 2
@@ -105,14 +105,24 @@ def carregar_dados(caminho_treino, caminho_validacao, caminho_resultado):
 # Pré-processamento dos dados
 def preprocessar_dados(df):
     df_proc = df.copy()
+    
+    # Convertendo variáveis categóricas para numéricas
     df_proc['Sex'] = df_proc['Sex'].map({'male': 0, 'female': 1})
     df_proc['Embarked'] = df_proc['Embarked'].fillna('S').astype('category').cat.codes
     df_proc['Age'] = df_proc['Age'].fillna(df_proc['Age'].median())
     df_proc['Fare'] = df_proc['Fare'].fillna(df_proc['Fare'].median())
-    return df_proc[['Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare', 'Embarked']]
+    df_proc['SibSp'] = df_proc['SibSp'] + df_proc['Parch']  
+    df_proc['Alone'] = (df_proc['SibSp'] == 0).astype(int)  
+    
+    # Convertendo 'Cabin' e 'Ticket' para colunas numéricas ou descartando se não forem úteis
+    df_proc['Cabin'] = df_proc['Cabin'].astype('category').cat.codes
+    df_proc['Ticket'] = df_proc['Ticket'].astype('category').cat.codes
+
+    # Retornando todas as colunas relevantes para o modelo
+    return df_proc[['Pclass', 'Sex', 'Age', 'SibSp', 'Alone', 'Fare', 'Embarked', 'Cabin', 'Ticket']]
 
 # Função para obter predições
-def obter_predicoes(X_treino_escalado, y_treino, X_validacao_escalado, k=3):
+def obter_predicoes(X_treino_escalado, y_treino, X_validacao_escalado, k=5):  # Alterando k para 5
     arvore_kd = ArvoreKD(X_treino_escalado)
     _, indices = arvore_kd.consultar(X_validacao_escalado, k=k)
     
@@ -145,7 +155,7 @@ def main():
     X_validacao_escalado = normalizador.transformar(X_validacao_arr)
 
     # Obtém predições
-    predicoes = obter_predicoes(X_treino_escalado, y_treino, X_validacao_escalado, k=3)
+    predicoes = obter_predicoes(X_treino_escalado, y_treino, X_validacao_escalado, k=5)
 
     # Compara e exibe os resultados
     df_resultado['Previsto'] = predicoes
