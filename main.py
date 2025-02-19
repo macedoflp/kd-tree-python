@@ -1,62 +1,48 @@
 import pandas as pd
+import numpy as np
+from sklearn.neighbors import KDTree
+from sklearn.preprocessing import StandardScaler
 
-# Classe que representa um nó da KD tree
-class Node:
-    def __init__(self, point, axis, left, right):
-        self.point = point    # O ponto armazenado neste nó (lista de valores)
-        self.axis = axis      # A dimensão utilizada para dividir os pontos neste nó
-        self.left = left      # Subárvore esquerda (pontos menores na dimensão 'axis')
-        self.right = right    # Subárvore direita (pontos maiores na dimensão 'axis')
+# Carregar os dados
+train = pd.read_csv("train.csv")
+validation = pd.read_csv("validation.csv")
+result = pd.read_csv("result.csv")
 
-# Função para construir a KD tree recursivamente
-def build_kdtree(points, depth=0):
-    if not points:
-        return None
-
-    # Número de dimensões dos pontos (neste caso, 5)
-    k = len(points[0])
-    # Seleciona a dimensão de corte (rotação entre 0 e k-1)
-    axis = depth % k
-
-    # Ordena os pontos de acordo com o valor na dimensão 'axis'
-    points.sort(key=lambda point: point[axis])
-    median_index = len(points) // 2
-
-    # Cria o nó com o ponto mediano e constrói recursivamente as subárvores
-    return Node(
-        point=points[median_index],
-        axis=axis,
-        left=build_kdtree(points[:median_index], depth + 1),
-        right=build_kdtree(points[median_index + 1:], depth + 1)
-    )
-
-# Função auxiliar para imprimir a árvore (opcional)
-def print_tree(node, depth=0):
-    if node is not None:
-        print("  " * depth + f"Nó (axis {node.axis}): {node.point}")
-        print_tree(node.left, depth + 1)
-        print_tree(node.right, depth + 1)
-
-def main():
-    # Lê o arquivo CSV contendo os dados
-    df = pd.read_csv('train.csv')
+# Pré-processamento dos dados
+def preprocess(df):
+    # Converter 'Sex' para numérico
+    df['Sex'] = df['Sex'].map({'male': 0, 'female': 1})
     
-    # Seleciona os atributos numéricos a partir do dicionário de dados:
-    # pclass: classe do bilhete (1, 2, 3)
-    # Age: idade em anos
-    # sibsp: número de irmãos/cônjuges a bordo
-    # parch: número de pais/filhos a bordo
-    # fare: tarifa paga
-    df_numeric = df[['pclass', 'Age', 'sibsp', 'parch', 'fare']].dropna()
+    # Codificar 'Embarked' (preencher missing com 'S' e converter para códigos)
+    df['Embarked'] = df['Embarked'].fillna('S').astype('category').cat.codes
     
-    # Converte os dados para uma lista de pontos (cada ponto é uma lista de 5 números)
-    points = df_numeric.values.tolist()
+    # Preencher valores faltantes em 'Age' e 'Fare'
+    df['Age'] = df['Age'].fillna(df['Age'].median())
+    df['Fare'] = df['Fare'].fillna(df['Fare'].median())
     
-    # Constrói a KD tree a partir dos pontos
-    tree = build_kdtree(points)
-    
-    # Exibe a árvore (apenas para visualização; pode ser omitido se preferir)
-    print_tree(tree)
+    # Selecionar features
+    features = ['Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare', 'Embarked']
+    return df[features]
 
-if __name__ == "__main__":
-    main()
+# Pré-processar dados de treino e validação
+X_train = preprocess(train)
+y_train = train['Survived']
+X_val = preprocess(validation)
+
+# Normalizar os dados (importante para KD Tree)
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_val_scaled = scaler.transform(X_val)
+
+# Construir a KD Tree
+kd_tree = KDTree(X_train_scaled, leaf_size=40)
+
+# Buscar vizinhos mais próximos (k=3)
+distances, indices = kd_tree.query(X_val_scaled, k=3)
+
+# Prever sobrevivência (votação majoritária dos vizinhos)
+predictions = np.array([y_train.iloc[indices[i]].mode()[0] for i in range(len(X_val))])
+
+# Comparar com os resultados esperados
+accuracy = np.mean(predictions == result['Survived'])
+print(f"Acurácia: {accuracy * 100:.2f}%")
