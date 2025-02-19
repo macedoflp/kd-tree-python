@@ -2,137 +2,122 @@ import pandas as pd
 import numpy as np
 import heapq
 
-# Implementação de um StandardScaler simples
-class CustomStandardScaler:
+# Configuração para exibir todas as linhas
+pd.set_option('display.max_rows', None)
+
+# Implementação de um Normalizador simples (StandardScaler)
+class Normalizador:
     def __init__(self):
-        self.mean_ = None
-        self.scale_ = None
+        self.media = None
+        self.escala = None
 
-    def fit(self, X):
-        self.mean_ = np.mean(X, axis=0)
-        self.scale_ = np.std(X, axis=0)
-        # Evitar divisão por zero
-        self.scale_[self.scale_ == 0] = 1.0
-        return self
+    def ajustar(self, X):
+        self.media = np.mean(X, axis=0)
+        self.escala = np.std(X, axis=0)
+        self.escala[self.escala == 0] = 1.0  # Evitar divisão por zero
 
-    def transform(self, X):
-        return (X - self.mean_) / self.scale_
+    def transformar(self, X):
+        return (X - self.media) / self.escala
 
-    def fit_transform(self, X):
-        self.fit(X)
-        return self.transform(X)
+    def ajustar_transformar(self, X):
+        self.ajustar(X)
+        return self.transformar(X)
 
-# Classe que representa um nó da KD-Tree
-class KDNode:
-    def __init__(self, point, index, axis, left, right):
-        self.point = point      # Ponto (features) armazenado no nó
-        self.index = index      # Índice do ponto no conjunto original
-        self.axis = axis        # Eixo (dimensão) utilizado para a divisão
-        self.left = left        # Subárvore esquerda
-        self.right = right      # Subárvore direita
+# Classe para representar um nó da Árvore KD
+class NoKD:
+    def __init__(self, ponto, indice, eixo, esquerda, direita):
+        self.ponto = ponto
+        self.indice = indice
+        self.eixo = eixo
+        self.esquerda = esquerda
+        self.direita = direita
 
-# Função recursiva para construir a KD-Tree
-def build_kd_tree(data, indices, depth=0):
+# Função recursiva para construir a Árvore KD
+def construir_arvore_kd(dados, indices, profundidade=0):
     if not indices:
         return None
 
-    k = data.shape[1]            # Número de dimensões
-    axis = depth % k             # Seleciona o eixo com base na profundidade
+    k = dados.shape[1]  
+    eixo = profundidade % k  
 
-    # Ordena os índices com base no valor da feature no eixo atual
-    sorted_indices = sorted(indices, key=lambda i: data[i, axis])
-    median_idx = len(sorted_indices) // 2
-    median_index = sorted_indices[median_idx]
+    indices_ordenados = sorted(indices, key=lambda i: dados[i, eixo])
+    indice_mediano = len(indices_ordenados) // 2
+    indice_central = indices_ordenados[indice_mediano]
 
-    # Cria o nó atual e constrói recursivamente as subárvores
-    return KDNode(
-        point=data[median_index],
-        index=median_index,
-        axis=axis,
-        left=build_kd_tree(data, sorted_indices[:median_idx], depth + 1),
-        right=build_kd_tree(data, sorted_indices[median_idx + 1:], depth + 1)
+    return NoKD(
+        ponto=dados[indice_central],
+        indice=indice_central,
+        eixo=eixo,
+        esquerda=construir_arvore_kd(dados, indices_ordenados[:indice_mediano], profundidade + 1),
+        direita=construir_arvore_kd(dados, indices_ordenados[indice_mediano + 1:], profundidade + 1)
     )
 
-# Função recursiva para buscar os k vizinhos mais próximos na KD-Tree
-def kd_tree_search(node, query_point, k, heap):
-    if node is None:
+# Função para buscar os k vizinhos mais próximos na Árvore KD
+def buscar_vizinhos(no, ponto_consulta, k, heap):
+    if no is None:
         return
 
-    # Calcula a distância Euclidiana ao quadrado
-    dist = np.sum((query_point - node.point) ** 2)
+    distancia = np.sum((ponto_consulta - no.ponto) ** 2)
 
-    # Se o heap não estiver cheio, adiciona o ponto; se estiver, substitui se o ponto for mais próximo
     if len(heap) < k:
-        heapq.heappush(heap, (-dist, node.index))
+        heapq.heappush(heap, (-distancia, no.indice))
     else:
-        if dist < -heap[0][0]:
-            heapq.heappushpop(heap, (-dist, node.index))
+        if distancia < -heap[0][0]:
+            heapq.heappushpop(heap, (-distancia, no.indice))
 
-    axis = node.axis
-    diff = query_point[axis] - node.point[axis]
+    eixo = no.eixo
+    diferenca = ponto_consulta[eixo] - no.ponto[eixo]
 
-    # Decide qual subárvore explorar primeiro
-    if diff < 0:
-        first, second = node.left, node.right
-    else:
-        first, second = node.right, node.left
+    primeiro, segundo = (no.esquerda, no.direita) if diferenca < 0 else (no.direita, no.esquerda)
 
-    kd_tree_search(first, query_point, k, heap)
+    buscar_vizinhos(primeiro, ponto_consulta, k, heap)
 
-    # Se a distância ao plano de divisão for menor que a pior distância no heap, explora a outra subárvore
-    if len(heap) < k or diff**2 < -heap[0][0]:
-        kd_tree_search(second, query_point, k, heap)
+    if len(heap) < k or diferenca**2 < -heap[0][0]:
+        buscar_vizinhos(segundo, ponto_consulta, k, heap)
 
-# Classe que encapsula a construção e consulta da KD-Tree
-class KDTreeMy:
-    def __init__(self, data):
-        self.data = data
-        indices = list(range(data.shape[0]))
-        self.root = build_kd_tree(data, indices)
+# Classe que encapsula a Árvore KD
+class ArvoreKD:
+    def __init__(self, dados):
+        indices = list(range(dados.shape[0]))
+        self.raiz = construir_arvore_kd(dados, indices)
     
-    def query(self, query_points, k=1):
-        all_distances = []
-        all_indices = []
-        for qp in query_points:
+    def consultar(self, pontos_consulta, k=1):
+        todas_distancias = []
+        todos_indices = []
+        for ponto in pontos_consulta:
             heap = []
-            kd_tree_search(self.root, qp, k, heap)
-            # Converte o heap (com distâncias negativas) para valores positivos
-            neighbors = sorted([(-d, idx) for d, idx in heap])
-            distances = [d for d, idx in neighbors]
-            indices = [idx for d, idx in neighbors]
-            all_distances.append(distances)
-            all_indices.append(indices)
-        return np.array(all_distances), np.array(all_indices)
+            buscar_vizinhos(self.raiz, ponto, k, heap)
+            vizinhos = sorted([(-d, idx) for d, idx in heap])
+            distancias = [d for d, idx in vizinhos]
+            indices = [idx for d, idx in vizinhos]
+            todas_distancias.append(distancias)
+            todos_indices.append(indices)
+        return np.array(todas_distancias), np.array(todos_indices)
 
-# Função para carregar os dados dos arquivos CSV
+# Função para carregar os dados
 def carregar_dados(caminho_treino, caminho_validacao, caminho_resultado):
-    df_treino = pd.read_csv(caminho_treino)
-    df_validacao = pd.read_csv(caminho_validacao)
-    df_resultado = pd.read_csv(caminho_resultado)
-    return df_treino, df_validacao, df_resultado
+    return (
+        pd.read_csv(caminho_treino),
+        pd.read_csv(caminho_validacao),
+        pd.read_csv(caminho_resultado)
+    )
 
-# Função para pré-processar os dados:
-# - Converte 'Sex' para numérico;
-# - Preenche missing em 'Embarked' e codifica;
-# - Preenche missing em 'Age' e 'Fare' com a mediana;
-# - Seleciona as features relevantes
+# Pré-processamento dos dados
 def preprocessar_dados(df):
     df_proc = df.copy()
     df_proc['Sex'] = df_proc['Sex'].map({'male': 0, 'female': 1})
     df_proc['Embarked'] = df_proc['Embarked'].fillna('S').astype('category').cat.codes
     df_proc['Age'] = df_proc['Age'].fillna(df_proc['Age'].median())
     df_proc['Fare'] = df_proc['Fare'].fillna(df_proc['Fare'].median())
-    features = ['Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare', 'Embarked']
-    return df_proc[features]
+    return df_proc[['Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare', 'Embarked']]
 
-# Função para obter as predições utilizando kNN com a KD-Tree implementada
-def obter_predicoes(X_treino_scaled, y_treino, X_validacao_scaled, k=3):
-    kd_tree = KDTreeMy(X_treino_scaled)
-    _, indices = kd_tree.query(X_validacao_scaled, k=k)
+# Função para obter predições
+def obter_predicoes(X_treino_escalado, y_treino, X_validacao_escalado, k=3):
+    arvore_kd = ArvoreKD(X_treino_escalado)
+    _, indices = arvore_kd.consultar(X_validacao_escalado, k=k)
     
     predicoes = []
     for vizinhos in indices:
-        # Votação majoritária dos vizinhos
         voto = y_treino.iloc[vizinhos].mode().iloc[0]
         predicoes.append(voto)
     return np.array(predicoes)
@@ -141,30 +126,37 @@ def main():
     caminho_treino = "train.csv"
     caminho_validacao = "validation.csv"
     caminho_resultado = "result.csv"
-    
+
     # Carrega os dados
     df_treino, df_validacao, df_resultado = carregar_dados(caminho_treino, caminho_validacao, caminho_resultado)
-    
+
     # Pré-processa os dados
     X_treino = preprocessar_dados(df_treino)
     y_treino = df_treino['Survived']
     X_validacao = preprocessar_dados(df_validacao)
-    
-    # Converte os DataFrames para arrays NumPy
+
+    # Converte para NumPy arrays
     X_treino_arr = X_treino.values
     X_validacao_arr = X_validacao.values
-    
-    # Normaliza os dados utilizando nosso CustomStandardScaler
-    scaler = CustomStandardScaler()
-    X_treino_scaled = scaler.fit_transform(X_treino_arr)
-    X_validacao_scaled = scaler.transform(X_validacao_arr)
-    
-    # Obtém as predições utilizando kNN (k=3)
-    predicoes = obter_predicoes(X_treino_scaled, y_treino, X_validacao_scaled, k=3)
-    
-    # Calcula a acurácia comparando com os resultados esperados
-    acuracia = np.mean(predicoes == df_resultado['Survived'])
-    print(f"Acurácia: {acuracia * 100:.2f}%")
 
-if __name__ == '__main__':
+    # Normaliza os dados usando a classe customizada
+    normalizador = Normalizador()
+    X_treino_escalado = normalizador.ajustar_transformar(X_treino_arr)
+    X_validacao_escalado = normalizador.transformar(X_validacao_arr)
+
+    # Obtém predições
+    predicoes = obter_predicoes(X_treino_escalado, y_treino, X_validacao_escalado, k=3)
+
+    # Compara e exibe os resultados
+    df_resultado['Previsto'] = predicoes
+    df_resultado['Correto'] = df_resultado['Survived'] == df_resultado['Previsto']
+
+    # Exibe todas as previsões
+    print(df_resultado[['Survived', 'Previsto', 'Correto']].to_string(index=False))
+
+    # Exibe acurácia
+    acuracia = np.mean(df_resultado['Correto'])
+    print(f"\nAcurácia: {acuracia * 100:.2f}%")
+
+if __name__ == "__main__":
     main()
