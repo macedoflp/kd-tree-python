@@ -2,10 +2,10 @@ import pandas as pd
 import numpy as np
 import heapq
 
-# Configuração para exibir todas as linhas
+
 pd.set_option('display.max_rows', None)
 
-# Implementação de um Normalizador simples (StandardScaler)
+
 class Normalizador:
     def __init__(self):
         self.media = None
@@ -14,7 +14,7 @@ class Normalizador:
     def ajustar(self, X):
         self.media = np.mean(X, axis=0)
         self.escala = np.std(X, axis=0)
-        self.escala[self.escala == 0] = 1.0  # Evitar divisão por zero
+        self.escala[self.escala == 0] = 1.0 
 
     def transformar(self, X):
         return (X - self.media) / self.escala
@@ -23,7 +23,7 @@ class Normalizador:
         self.ajustar(X)
         return self.transformar(X)
 
-# Classe para representar um nó da Árvore KD
+
 class NoKD:
     def __init__(self, ponto, indice, eixo, esquerda, direita):
         self.ponto = ponto
@@ -32,13 +32,13 @@ class NoKD:
         self.esquerda = esquerda
         self.direita = direita
 
-# Função recursiva para construir a Árvore KD
+
 def construir_arvore_kd(dados, indices, profundidade=0):
     if not indices:
         return None
 
-    k = dados.shape[1]  # Número de dimensões
-    eixo = profundidade % k  # Eixo que será usado na divisão
+    k = dados.shape[1] 
+    eixo = profundidade % k  
 
     indices_ordenados = sorted(indices, key=lambda i: dados[i, eixo])
     indice_mediano = len(indices_ordenados) // 2
@@ -52,7 +52,7 @@ def construir_arvore_kd(dados, indices, profundidade=0):
         direita=construir_arvore_kd(dados, indices_ordenados[indice_mediano + 1:], profundidade + 1)
     )
 
-# Função para buscar os k vizinhos mais próximos na Árvore KD
+
 def buscar_vizinhos(no, ponto_consulta, k, heap):
     if no is None:
         return
@@ -75,7 +75,7 @@ def buscar_vizinhos(no, ponto_consulta, k, heap):
     if len(heap) < k or diferenca**2 < -heap[0][0]:
         buscar_vizinhos(segundo, ponto_consulta, k, heap)
 
-# Classe que encapsula a Árvore KD
+
 class ArvoreKD:
     def __init__(self, dados):
         indices = list(range(dados.shape[0]))
@@ -94,7 +94,7 @@ class ArvoreKD:
             todos_indices.append(indices)
         return np.array(todas_distancias), np.array(todos_indices)
 
-# Função para carregar os dados
+
 def carregar_dados(caminho_treino, caminho_validacao, caminho_resultado):
     return (
         pd.read_csv(caminho_treino),
@@ -102,11 +102,11 @@ def carregar_dados(caminho_treino, caminho_validacao, caminho_resultado):
         pd.read_csv(caminho_resultado)
     )
 
-# Pré-processamento dos dados
+
 def preprocessar_dados(df):
     df_proc = df.copy()
     
-    # Convertendo variáveis categóricas para numéricas
+
     df_proc['Sex'] = df_proc['Sex'].map({'male': 0, 'female': 1})
     df_proc['Embarked'] = df_proc['Embarked'].fillna('S').astype('category').cat.codes
     df_proc['Age'] = df_proc['Age'].fillna(df_proc['Age'].median())
@@ -114,14 +114,14 @@ def preprocessar_dados(df):
     df_proc['SibSp'] = df_proc['SibSp'] + df_proc['Parch']  
     df_proc['Alone'] = (df_proc['SibSp'] == 0).astype(int)  
     
-    # Convertendo 'Cabin' e 'Ticket' para colunas numéricas ou descartando se não forem úteis
+
     df_proc['Cabin'] = df_proc['Cabin'].astype('category').cat.codes
     df_proc['Ticket'] = df_proc['Ticket'].astype('category').cat.codes
 
-    # Retornando todas as colunas relevantes para o modelo
+
     return df_proc[['Pclass', 'Sex', 'Age', 'SibSp', 'Alone', 'Fare', 'Embarked', 'Cabin', 'Ticket']]
 
-# Função para obter predições
+
 def obter_predicoes(X_treino_escalado, y_treino, X_validacao_escalado, k=5):  # Alterando k para 5
     arvore_kd = ArvoreKD(X_treino_escalado)
     _, indices = arvore_kd.consultar(X_validacao_escalado, k=k)
@@ -137,34 +137,33 @@ def main():
     caminho_validacao = "validation.csv"
     caminho_resultado = "result.csv"
 
-    # Carrega os dados
+
     df_treino, df_validacao, df_resultado = carregar_dados(caminho_treino, caminho_validacao, caminho_resultado)
 
-    # Pré-processa os dados
+
     X_treino = preprocessar_dados(df_treino)
     y_treino = df_treino['Survived']
     X_validacao = preprocessar_dados(df_validacao)
 
-    # Converte para NumPy arrays
+  
     X_treino_arr = X_treino.values
     X_validacao_arr = X_validacao.values
 
-    # Normaliza os dados usando a classe customizada
+  
     normalizador = Normalizador()
     X_treino_escalado = normalizador.ajustar_transformar(X_treino_arr)
     X_validacao_escalado = normalizador.transformar(X_validacao_arr)
 
-    # Obtém predições
+
     predicoes = obter_predicoes(X_treino_escalado, y_treino, X_validacao_escalado, k=5)
 
-    # Compara e exibe os resultados
+
     df_resultado['Previsto'] = predicoes
     df_resultado['Correto'] = df_resultado['Survived'] == df_resultado['Previsto']
 
-    # Exibe todas as previsões
+
     print(df_resultado[['Survived', 'Previsto', 'Correto']].to_string(index=False))
 
-    # Exibe acurácia
     acuracia = np.mean(df_resultado['Correto'])
     print(f"\nAcurácia: {acuracia * 100:.2f}%")
 
